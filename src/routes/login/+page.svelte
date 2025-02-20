@@ -9,7 +9,7 @@
 	method="post"
 >
 	<div class="form-control w-full max-w-xs">
-		<!-- svelte-ignore a11y-label-has-associated-control -->
+		<!-- svelte-ignore a11y_label_has_associated_control -->
 		<label class="label">
 			<span class="label-text">Correo Electronico</span>
 		</label>
@@ -23,7 +23,7 @@
 	</div>
 
 	<div class="form-control w-full max-w-xs">
-		<!-- svelte-ignore a11y-label-has-associated-control -->
+		<!-- svelte-ignore a11y_label_has_associated_control -->
 		<label class="label">
 			<span class="label-text">Contraseña</span>
 		</label>

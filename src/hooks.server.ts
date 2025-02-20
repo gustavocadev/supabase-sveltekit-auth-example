@@ -1,28 +1,67 @@
 // src/hooks.server.ts
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
-import { createSupabaseServerClient } from '@supabase/auth-helpers-sveltekit';
+import { createServerClient } from '@supabase/ssr';
 import type { Handle } from '@sveltejs/kit';
 
 export const handle: Handle = async ({ event, resolve }) => {
-	/*
-  Most of Supabase's functionalities can be used from the server-side using the Auth Helpers, including user authentication, querying and manipulating data in the Supabase database, and row level security. The only functionality that cannot be used from the server-side are real-time subscriptions, which require websockets and are only available on the client-side.
-  */
-	event.locals.supabase = createSupabaseServerClient({
-		supabaseUrl: PUBLIC_SUPABASE_URL,
-		supabaseKey: PUBLIC_SUPABASE_ANON_KEY,
-		event
-	});
+  event.locals.supabase = createServerClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll: () => event.cookies.getAll(),
+      /**
+       * SvelteKit's cookies API requires `path` to be explicitly set in
+       * the cookie options. Setting `path` to `/` replicates previous/
+       * standard behavior.
+       */
+      setAll: (cookiesToSet) => {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          event.cookies.set(name, value, { ...options, path: '/' });
+        });
+      },
+    },
+  });
 
-	// a little helper that is written for convenience
-	event.locals.getSession = async () => {
-		const { data } = await event.locals.supabase.auth.getSession();
-		const { session } = data;
-		return session;
-	};
+  const refreshToken = event.request.headers.get('x-refresh-token');
+  const authHeader = event.request.headers.get('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
 
-	return resolve(event, {
-		filterSerializedResponseHeaders(name) {
-			return name === 'content-range';
-		}
-	});
+    // Autenticar manualmente con el token
+    event.locals.supabase.auth.setSession({
+      access_token: token,
+      refresh_token: token,
+    });
+
+  }
+
+  /**
+   * Unlike `supabase.auth.getSession()`, which returns the session _without_
+   * validating the JWT, this function also calls `getUser()` to validate the
+   * JWT before returning the session.
+   */
+  event.locals.safeGetSession = async () => {
+    const {
+      data: { session },
+    } = await event.locals.supabase.auth.getSession();
+    if (!session) {
+      return { session: null, user: null };
+    }
+
+    const {
+      data: { user },
+      error,
+    } = await event.locals.supabase.auth.getUser();
+    if (error) {
+      // JWT validation has failed
+      return { session: null, user: null };
+    }
+
+    return { session, user };
+  };
+
+
+  return resolve(event, {
+    filterSerializedResponseHeaders(name) {
+      return name === 'content-range' || name === 'x-supabase-api-version';
+    },
+  });
 };
